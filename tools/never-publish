@@ -1,0 +1,9 @@
+# Packages that must never reach the harbour release even if listed in tools/packages.
+# nvidia packages are built locally but never distributed.
+nvidia
+nvidia-dkms
+nvidia-firmware
+nvidia-gtklibs
+nvidia-libs
+nvidia-libs-32bit
+nvidia-opencl

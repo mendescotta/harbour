@@ -1,0 +1,23 @@
+# Packages published to the harbour release.
+# Base template names only; all subpackages of each are included automatically.
+# No runit-intercompat packages, no DE stacks, no gcc16.
+
+# dinit boot stack
+dinit-void
+base-system-dinit
+dinit-settingsd
+
+# installer and hardware detection
+caerus
+voyage
+voidhw
+
+# GTK4 and theme (rebuilt against our gtk4/glib)
+gtk4
+glib
+pango
+adw-gtk3
+
+# fonts and desktop shell
+nerd-fonts-cascadiacode
+xfce-core
