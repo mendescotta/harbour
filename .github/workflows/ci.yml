@@ -40,7 +40,7 @@ jobs:
           xbps-install -Sy
           xbps-install -uy xbps
           xbps-install -Suy
-          xbps-install -y github-cli
+          xbps-install -y bash github-cli
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
