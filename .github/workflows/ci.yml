@@ -59,6 +59,7 @@ jobs:
           xbps-rindex -a voidlab-repo/*.xbps >/dev/null
 
       - name: Filter to harbour-approved packages
+        shell: bash
         run: |
           set -euo pipefail
           . voidlab/tools/ci-lib.sh
@@ -89,6 +90,7 @@ jobs:
           [ "$n" -gt 0 ] || { echo "!! no packages selected — check tools/packages"; exit 1; }
 
       - name: Sign and publish
+        shell: bash
         env:
           VOIDLAB_PRIVKEY: ${{ secrets.VOIDLAB_PRIVKEY }}
           HARBOUR_GH_REPO: ${{ github.repository }}
