@@ -1,11 +1,11 @@
 name: CI
 
-# Syncs a curated subset of the voidlab release to the harbour binary repository.
-# Harbour does not build from source: it filters voidlab's release to only the
+# Syncs a curated subset of the voidlab-testing release to the voidlab-packages binary repository.
+# voidlab-packages does not build from source: it filters voidlab-testing's release to only the
 # packages listed in tools/packages (and their subpackages), then signs and
-# uploads them to the harbour `repo` release.
+# uploads them to the voidlab-packages `repo` release.
 #
-# Triggered daily (after voidlab's nightly run) and on any push that changes
+# Triggered daily (after voidlab-testing's nightly run) and on any push that changes
 # the approved package list.
 on:
   push:
@@ -44,36 +44,36 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          path: harbour
+          path: voidlab-packages
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          repository: mendescotta/voidlab
-          path: voidlab
+          repository: mendescotta/voidlab-testing
+          path: voidlab-testing
 
-      - name: Pull voidlab release
+      - name: Pull voidlab-testing release
         run: |
-          mkdir -p voidlab-repo
-          gh release download repo -R mendescotta/voidlab \
-            -D voidlab-repo/ --pattern '*.xbps' --clobber
-          xbps-rindex -a voidlab-repo/*.xbps >/dev/null
+          mkdir -p voidlab-testing-repo
+          gh release download repo -R mendescotta/voidlab-testing \
+            -D voidlab-testing-repo/ --pattern '*.xbps' --clobber
+          xbps-rindex -a voidlab-testing-repo/*.xbps >/dev/null
 
-      - name: Filter to harbour-approved packages
+      - name: Filter to approved packages
         shell: bash
         run: |
           set -euo pipefail
           W="$GITHUB_WORKSPACE"
 
-          # name_map_load resolves srcpkgs/ relative to cwd — run from the voidlab checkout
-          cd "$W/voidlab"
+          # name_map_load resolves srcpkgs/ relative to cwd — run from the voidlab-testing checkout
+          cd "$W/voidlab-testing"
           . tools/ci-lib.sh
           name_map_load
           cd "$W"
 
-          mapfile -t approved < <(sed 's/#.*//' "$W/harbour/tools/packages" | grep -v '^[[:space:]]*$')
-          mapfile -t never    < <(sed 's/#.*//' "$W/harbour/tools/never-publish" | grep -v '^[[:space:]]*$')
+          mapfile -t approved < <(sed 's/#.*//' "$W/voidlab-packages/tools/packages" | grep -v '^[[:space:]]*$')
+          mapfile -t never    < <(sed 's/#.*//' "$W/voidlab-packages/tools/never-publish" | grep -v '^[[:space:]]*$')
 
-          mkdir -p "$W/harbour-repo"
+          mkdir -p "$W/pkg-repo"
           n=0
           while read -r pkgver; do
             name="${pkgver%-*}"
@@ -85,53 +85,53 @@ jobs:
               case "$name" in "$nv"|"$nv"-*) skip=1 ;; esac
             done
             [ "$skip" = 1 ] && continue
-            for f in "$W/voidlab-repo/${pkgver}".*.xbps; do
+            for f in "$W/voidlab-testing-repo/${pkgver}".*.xbps; do
               [ -f "$f" ] || continue
-              ln "$f" "$W/harbour-repo/" 2>/dev/null || cp "$f" "$W/harbour-repo/"
+              ln "$f" "$W/pkg-repo/" 2>/dev/null || cp "$f" "$W/pkg-repo/"
               n=$((n + 1))
             done
-          done < <(xbps-query --ignore-conf-repos --repository="$W/voidlab-repo" -R -s '' | awk '{print $2}')
-          echo "harbour: $n packages selected"
+          done < <(xbps-query --ignore-conf-repos --repository="$W/voidlab-testing-repo" -R -s '' | awk '{print $2}')
+          echo "voidlab-packages: $n packages selected"
           [ "$n" -gt 0 ] || { echo "!! no packages selected — check tools/packages"; exit 1; }
 
       - name: Sign and publish
         shell: bash
         env:
           VOIDLAB_PRIVKEY: ${{ secrets.VOIDLAB_PRIVKEY }}
-          HARBOUR_GH_REPO: ${{ github.repository }}
+          PKG_GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           W="$GITHUB_WORKSPACE"
-          printf '%s' "$VOIDLAB_PRIVKEY" > /tmp/harbour-key.pem
-          chmod 600 /tmp/harbour-key.pem
+          printf '%s' "$VOIDLAB_PRIVKEY" > /tmp/sign-key.pem
+          chmod 600 /tmp/sign-key.pem
 
-          xbps-rindex -a "$W/harbour-repo/"*.xbps >/dev/null
-          xbps-rindex --privkey /tmp/harbour-key.pem \
-            --signedby "harbour <mendescotta>" --sign "$W/harbour-repo/" >/dev/null
-          xbps-rindex --privkey /tmp/harbour-key.pem \
-            --sign-pkg "$W/harbour-repo/"*.xbps >/dev/null
+          xbps-rindex -a "$W/pkg-repo/"*.xbps >/dev/null
+          xbps-rindex --privkey /tmp/sign-key.pem \
+            --signedby "voidlab-packages <mendescotta>" --sign "$W/pkg-repo/" >/dev/null
+          xbps-rindex --privkey /tmp/sign-key.pem \
+            --sign-pkg "$W/pkg-repo/"*.xbps >/dev/null
 
-          gh release view repo -R "$HARBOUR_GH_REPO" >/dev/null 2>&1 || \
-            gh release create repo -R "$HARBOUR_GH_REPO" --prerelease \
-              --title "harbour repository" \
-              --notes "xbps binary repository — Devoid package set"
+          gh release view repo -R "$PKG_GH_REPO" >/dev/null 2>&1 || \
+            gh release create repo -R "$PKG_GH_REPO" --prerelease \
+              --title "voidlab-packages repository" \
+              --notes "xbps binary repository — voidlab package set"
 
-          remote=$(gh release view repo -R "$HARBOUR_GH_REPO" \
+          remote=$(gh release view repo -R "$PKG_GH_REPO" \
             --json assets -q '.assets[] | "\(.name) \(.digest)"')
 
           up=()
-          for f in "$W/harbour-repo/"*; do
+          for f in "$W/pkg-repo/"*; do
             n=$(basename "$f")
             digest=$(sha256sum "$f" | awk '{print "sha256:"$1}')
             echo "$remote" | grep -qF "$n $digest" || up+=("$f")
           done
-          echo "=> uploading ${#up[@]} of $(ls "$W/harbour-repo/" | wc -l) files"
+          echo "=> uploading ${#up[@]} of $(ls "$W/pkg-repo/" | wc -l) files"
           [ ${#up[@]} -eq 0 ] || \
-            gh release upload repo -R "$HARBOUR_GH_REPO" --clobber "${up[@]}"
+            gh release upload repo -R "$PKG_GH_REPO" --clobber "${up[@]}"
 
           for n in $(echo "$remote" | awk '{print $1}'); do
-            [ -e "$W/harbour-repo/$n" ] || \
-              gh release delete-asset repo "$n" -R "$HARBOUR_GH_REPO" -y
+            [ -e "$W/pkg-repo/$n" ] || \
+              gh release delete-asset repo "$n" -R "$PKG_GH_REPO" -y
           done
 
-          echo "repository: https://github.com/$HARBOUR_GH_REPO/releases/download/repo"
+          echo "repository: https://github.com/$PKG_GH_REPO/releases/download/repo"
